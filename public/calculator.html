@@ -21,27 +21,34 @@
   <!-- plak hier alles vanaf <style> tot en met </script> -->
   <!-- END: jouw fragment -->
 
-  <!-- Auto-height naar Wix iframe (aanrader) -->
-  <script>
+ <script>
+  (function () {
+    // voorkom dubbele initialisatie
+    if (window.__gmmHeightHooked) return;
+    window.__gmmHeightHooked = true;
+
     function gmmSendHeight() {
       const h = document.documentElement.scrollHeight;
       window.parent.postMessage({ type: "gmm:setHeight", height: h }, "*");
     }
+
     window.addEventListener("load", () => {
       gmmSendHeight();
       new ResizeObserver(gmmSendHeight).observe(document.body);
     });
 
-    // Na elke render even opnieuw hoogte sturen (jouw code rendert dynamisch)
-    const _render = window.render;
-    if (typeof _render === "function") {
+    // render hook (veilig, maar slechts één keer)
+    if (typeof window.render === "function" && !window.__gmmRenderWrapped) {
+      window.__gmmRenderWrapped = true;
+      const originalRender = window.render;
       window.render = function () {
-        _render();
+        originalRender();
         setTimeout(gmmSendHeight, 0);
         setTimeout(gmmSendHeight, 150);
       };
     }
-  </script>
+  })();
+</script>
 </body>
 </html>
 </head>
