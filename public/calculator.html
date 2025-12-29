@@ -4,80 +4,44 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>GMM Calculator</title>
-
-  <!-- Font --> <!doctype html>
-<html lang="nl">
-<head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>GMM Calculator</title>
-
-  <!-- Font -->
   <link href="https://fonts.googleapis.com/css2?family=Quicksand:wght@400;500;600;700&display=swap" rel="stylesheet">
 </head>
 
 <body style="margin:0; background:transparent; font-family:Quicksand,-apple-system,BlinkMacSystemFont,sans-serif;">
-  <!-- START: jouw fragment -->
-  <!-- plak hier alles vanaf <style> tot en met </script> -->
-  <!-- END: jouw fragment -->
+  <div id="progress-container"></div>
+  <div id="calculator-container"></div>
 
- <script>
-  (function () {
-    // voorkom dubbele initialisatie
-    if (window.__gmmHeightHooked) return;
-    window.__gmmHeightHooked = true;
+  <!-- START: plak hier jouw COMPLETE calculator-fragment: <style> ... </style> + <script> ... </script> -->
+  <!-- LET OP: verwijder uit dat fragment de 2 divs met progress-container/calculator-container als die er ook in staan -->
+  <!-- END -->
 
-    function gmmSendHeight() {
-      const h = document.documentElement.scrollHeight;
-      window.parent.postMessage({ type: "gmm:setHeight", height: h }, "*");
-    }
-
-    window.addEventListener("load", () => {
-      gmmSendHeight();
-      new ResizeObserver(gmmSendHeight).observe(document.body);
-    });
-
-    // render hook (veilig, maar slechts één keer)
-    if (typeof window.render === "function" && !window.__gmmRenderWrapped) {
-      window.__gmmRenderWrapped = true;
-      const originalRender = window.render;
-      window.render = function () {
-        originalRender();
-        setTimeout(gmmSendHeight, 0);
-        setTimeout(gmmSendHeight, 150);
-      };
-    }
-  })();
-</script>
-</body>
-</html>
-</head>
-
-<body style="margin:0; background:transparent; font-family:Quicksand,-apple-system,BlinkMacSystemFont,sans-serif;">
-  <!-- START: jouw fragment -->
-  <!-- plak hier alles vanaf <style> tot en met </script> -->
-  <!-- END: jouw fragment -->
-
-  <!-- Auto-height naar Wix iframe (aanrader) -->
+  <!-- Auto-height naar Wix iframe -->
   <script>
-    function gmmSendHeight() {
-      const h = document.documentElement.scrollHeight;
-      window.parent.postMessage({ type: "gmm:setHeight", height: h }, "*");
-    }
-    window.addEventListener("load", () => {
-      gmmSendHeight();
-      new ResizeObserver(gmmSendHeight).observe(document.body);
-    });
+    (function () {
+      if (window.__gmmHeightHooked) return;
+      window.__gmmHeightHooked = true;
 
-    // Na elke render even opnieuw hoogte sturen (jouw code rendert dynamisch)
-    const _render = window.render;
-    if (typeof _render === "function") {
-      window.render = function () {
-        _render();
-        setTimeout(gmmSendHeight, 0);
-        setTimeout(gmmSendHeight, 150);
-      };
-    }
+      function gmmSendHeight() {
+        const h = document.documentElement.scrollHeight;
+        window.parent.postMessage({ type: "gmm:setHeight", height: h }, "*");
+      }
+
+      window.addEventListener("load", () => {
+        gmmSendHeight();
+        new ResizeObserver(gmmSendHeight).observe(document.body);
+      });
+
+      // Als er een render() bestaat, wrap hem één keer zodat hoogte mee-updatet
+      if (typeof window.render === "function" && !window.__gmmRenderWrapped) {
+        window.__gmmRenderWrapped = true;
+        const originalRender = window.render;
+        window.render = function () {
+          originalRender();
+          setTimeout(gmmSendHeight, 0);
+          setTimeout(gmmSendHeight, 150);
+        };
+      }
+    })();
   </script>
 </body>
 </html>
