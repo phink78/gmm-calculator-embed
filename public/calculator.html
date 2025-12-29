@@ -1,0 +1,584 @@
+<style>
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: Quicksand, -apple-system, BlinkMacSystemFont, sans-serif;
+  background: transparent;
+  min-height: 100%;
+  padding: 0;
+}
+
+#calculator-container {
+  max-width: 100%;
+  margin: 0 auto;
+}
+
+#progress-container {
+  max-width: 100%;
+  margin: 0 auto 24px auto;
+}
+
+input[type="range"] {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  height: 8px;
+  border-radius: 4px;
+  background: #E3E6E5;
+  outline: none;
+}
+
+input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: #2E7D6B;
+  cursor: pointer;
+  box-shadow: 0 2px 8px rgba(46, 125, 107, 0.4);
+}
+
+input[type="range"]::-moz-range-thumb {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: #2E7D6B;
+  cursor: pointer;
+  border: none;
+}
+
+.option-card:hover {
+  border-color: #2E7D6B !important;
+  background-color: rgba(46, 125, 107, 0.1) !important;
+}
+
+.btn-primary:hover {
+  box-shadow: 0 6px 20px rgba(46, 125, 107, 0.4);
+}
+
+.btn-secondary:hover {
+  background-color: #d1d5d4 !important;
+}
+
+input[type="text"]:focus,
+input[type="email"]:focus,
+input[type="tel"]:focus,
+textarea:focus {
+  border-color: #2E7D6B !important;
+  box-shadow: 0 0 0 3px rgba(46, 125, 107, 0.15);
+  outline: none;
+}
+</style>
+
+<link href="https://fonts.googleapis.com/css2?family=Quicksand:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+<div id="progress-container"></div>
+<div id="calculator-container"></div>
+
+<script>
+var state = {
+  currentStep: 0,
+  customerType: null,
+  boatType: null,
+  boatLength: 6,
+  boatWeight: 2000,
+  currentDrive: null,
+  waterType: null,
+  tripDuration: null,
+  recommendation: null
+};
+
+var motors = [
+  { name: "GM5", power: 5, maxWeight: 2000, batteryOptions: [5, 10, 15] },
+  { name: "GM7.5", power: 7.5, maxWeight: 3500, batteryOptions: [10, 15, 20] },
+  { name: "GM10", power: 10, maxWeight: 5000, batteryOptions: [15, 20, 30] },
+  { name: "GM17.5", power: 17.5, maxWeight: 10000, batteryOptions: [20, 30, 40] },
+  { name: "GM22.5", power: 22.5, maxWeight: 15000, batteryOptions: [30, 40, 50] },
+  { name: "GM35", power: 35, maxWeight: 25000, batteryOptions: [40, 50, 60] },
+  { name: "GM45", power: 45, maxWeight: 35000, batteryOptions: [50, 60, 80] },
+  { name: "GM60", power: 60, maxWeight: 50000, batteryOptions: [60, 80, 100] }
+];
+
+var colors = {
+  primary: "#2E7D6B",
+  gold: "#F4B400",
+  dark: "#111111",
+  muted: "#666666",
+  line: "#E3E6E5",
+  bg: "#F7F8F7",
+  white: "#FFFFFF"
+};
+
+var isMobile = window.innerWidth < 768;
+
+function calculateRecommendation() {
+  var boatLength = state.boatLength;
+  var boatWeight = state.boatWeight;
+  var tripDuration = state.tripDuration;
+  var maxHullSpeed = 4.5 * Math.sqrt(boatLength);
+  var cruisingSpeedKmh = maxHullSpeed * 0.7;
+  var displacementTons = boatWeight / 1000;
+  var cruisingSpeedKnots = cruisingSpeedKmh / 1.852;
+  var requiredPowerCruising = Math.pow(displacementTons, 0.67) * Math.pow(cruisingSpeedKnots, 3) / 150;
+  requiredPowerCruising = requiredPowerCruising * 1.3;
+
+  var suitableMotor = null;
+  for (var i = 0; i < motors.length; i++) {
+    if (motors[i].power >= requiredPowerCruising && motors[i].maxWeight >= boatWeight) {
+      suitableMotor = motors[i];
+      break;
+    }
+  }
+  
+  if (!suitableMotor) {
+    var largestMotor = motors[motors.length - 1];
+    return {
+      motor: largestMotor.name,
+      motorPower: largestMotor.power,
+      batteryCapacity: largestMotor.batteryOptions[largestMotor.batteryOptions.length - 1],
+      cruisingSpeed: Math.round(cruisingSpeedKmh * 10) / 10,
+      estimatedCruisingTime: 0,
+      warning: "Boot is zwaarder dan aanbevolen. Neem contact op voor advies."
+    };
+  }
+
+  var durationMap = { "2-4": 3, "4-8": 6, "8+": 10 };
+  var desiredHours = durationMap[tripDuration] || 6;
+  var requiredBatteryCapacity = requiredPowerCruising * desiredHours;
+  
+  var recommendedBattery = suitableMotor.batteryOptions[suitableMotor.batteryOptions.length - 1];
+  for (var j = 0; j < suitableMotor.batteryOptions.length; j++) {
+    if (suitableMotor.batteryOptions[j] >= requiredBatteryCapacity) {
+      recommendedBattery = suitableMotor.batteryOptions[j];
+      break;
+    }
+  }
+  
+  var actualCruisingTime = Math.round((recommendedBattery / requiredPowerCruising) * 10) / 10;
+
+  return {
+    motor: suitableMotor.name,
+    motorPower: suitableMotor.power,
+    batteryCapacity: recommendedBattery,
+    cruisingSpeed: Math.round(cruisingSpeedKmh * 10) / 10,
+    estimatedCruisingTime: actualCruisingTime
+  };
+}
+
+function renderWelcomeScreen() {
+  var padding = isMobile ? "40px 24px" : "56px 40px";
+  var fontSize = isMobile ? "28px" : "36px";
+  var btnPadding = isMobile ? "16px 40px" : "18px 48px";
+  var btnWidth = isMobile ? "100%" : "auto";
+  
+  return '<div style="max-width: 580px; margin: 0 auto; padding: ' + padding + '; background: linear-gradient(135deg, #FFFFFF 0%, #F7F8F7 100%); border-radius: 24px; box-shadow: 0 4px 32px rgba(46, 125, 107, 0.12); text-align: center;">' +
+    '<div style="margin-bottom: 24px;">' +
+      '<svg width="60" height="60" viewBox="0 0 60 60" fill="none" xmlns="http://www.w3.org/2000/svg">' +
+        '<circle cx="30" cy="30" r="30" fill="#2E7D6B" fill-opacity="0.1"/>' +
+        '<path d="M30 15L45 40H15L30 15Z" stroke="#2E7D6B" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>' +
+        '<circle cx="30" cy="32" r="5" fill="#2E7D6B"/>' +
+      '</svg>' +
+    '</div>' +
+    '<h1 style="font-size: ' + fontSize + '; font-weight: 700; color: #2E7D6B; margin: 0 0 16px 0; line-height: 1.2;">' +
+      'Ontdek welke motor bij jouw boot past' +
+    '</h1>' +
+    '<p style="font-size: 16px; color: #666666; margin: 0 0 32px 0;">' +
+      'In <strong style="color: #2E7D6B;">2 minuten</strong> een persoonlijke aanbeveling' +
+    '</p>' +
+    '<button onclick="goToStep(1)" class="btn-primary" style="background: #2E7D6B; color: white; font-size: 18px; font-weight: 700; border: none; border-radius: 14px; padding: ' + btnPadding + '; box-shadow: 0 4px 16px rgba(46, 125, 107, 0.3); cursor: pointer; width: ' + btnWidth + ';">' +
+      'Start de calculator' +
+    '</button>' +
+    '<div style="display: flex; flex-direction: column; gap: 14px; margin-top: 32px; max-width: 360px; margin-left: auto; margin-right: auto;">' +
+      '<div style="display: flex; align-items: center; gap: 12px; text-align: left;">' +
+        '<svg width="20" height="20" viewBox="0 0 20 20" fill="#2E7D6B"><path d="M10 0C4.5 0 0 4.5 0 10s4.5 10 10 10 10-4.5 10-10S15.5 0 10 0zm-1 15l-5-5 1.4-1.4L9 12.2l5.6-5.6L16 8l-7 7z"/></svg>' +
+        '<span style="font-size: 14px; color: #666666;">Persoonlijk advies op maat</span>' +
+      '</div>' +
+      '<div style="display: flex; align-items: center; gap: 12px; text-align: left;">' +
+        '<svg width="20" height="20" viewBox="0 0 20 20" fill="#2E7D6B"><path d="M10 0C4.5 0 0 4.5 0 10s4.5 10 10 10 10-4.5 10-10S15.5 0 10 0zm-1 15l-5-5 1.4-1.4L9 12.2l5.6-5.6L16 8l-7 7z"/></svg>' +
+        '<span style="font-size: 14px; color: #666666;">Geen verplichtingen</span>' +
+      '</div>' +
+      '<div style="display: flex; align-items: center; gap: 12px; text-align: left;">' +
+        '<svg width="20" height="20" viewBox="0 0 20 20" fill="#2E7D6B"><path d="M10 0C4.5 0 0 4.5 0 10s4.5 10 10 10 10-4.5 10-10S15.5 0 10 0zm-1 15l-5-5 1.4-1.4L9 12.2l5.6-5.6L16 8l-7 7z"/></svg>' +
+        '<span style="font-size: 14px; color: #666666;">Direct resultaat</span>' +
+      '</div>' +
+    '</div>' +
+  '</div>';
+}
+
+function renderStep1() {
+  var padding = isMobile ? "32px 20px" : "40px 32px";
+  
+  return '<div style="max-width: 600px; margin: 0 auto; padding: ' + padding + '; background: white; border-radius: 24px; box-shadow: 0 4px 24px rgba(46, 125, 107, 0.12);">' +
+    '<h2 style="font-size: 24px; font-weight: 700; color: #111111; margin: 0 0 8px 0;">Wat beschrijft u het beste?</h2>' +
+    '<p style="font-size: 16px; color: #666666; margin: 0 0 28px 0;">Kies uw situatie</p>' +
+    '<div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px;">' +
+      '<div onclick="selectCustomer(\'particulier\')" class="option-card" style="padding: 28px 20px; border: 2px solid #E3E6E5; border-radius: 16px; cursor: pointer; text-align: center; transition: all 0.2s ease;">' +
+        '<div style="font-size: 36px; margin-bottom: 12px;">&#128100;</div>' +
+        '<div style="font-size: 18px; font-weight: 600; color: #111111;">Particulier</div>' +
+      '</div>' +
+      '<div onclick="selectCustomer(\'zakelijk\')" class="option-card" style="padding: 28px 20px; border: 2px solid #E3E6E5; border-radius: 16px; cursor: pointer; text-align: center; transition: all 0.2s ease;">' +
+        '<div style="font-size: 36px; margin-bottom: 12px;">&#127970;</div>' +
+        '<div style="font-size: 18px; font-weight: 600; color: #111111;">Zakelijk</div>' +
+      '</div>' +
+    '</div>' +
+  '</div>';
+}
+
+function renderStep2() {
+  var padding = isMobile ? "32px 20px" : "40px 32px";
+  
+  return '<div style="max-width: 600px; margin: 0 auto; padding: ' + padding + '; background: white; border-radius: 24px; box-shadow: 0 4px 24px rgba(46, 125, 107, 0.12);">' +
+    '<h2 style="font-size: 24px; font-weight: 700; color: #111111; margin: 0 0 8px 0;">Wat voor type boot heeft u?</h2>' +
+    '<p style="font-size: 16px; color: #666666; margin: 0 0 28px 0;">Selecteer het boottype</p>' +
+    '<div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">' +
+      '<div onclick="selectBoat(\'sloep\')" class="option-card" style="padding: 20px 16px; border: 2px solid #E3E6E5; border-radius: 14px; cursor: pointer; text-align: center;">' +
+        '<div style="font-size: 16px; font-weight: 600; color: #111111;">Sloep</div>' +
+      '</div>' +
+      '<div onclick="selectBoat(\'zeilboot\')" class="option-card" style="padding: 20px 16px; border: 2px solid #E3E6E5; border-radius: 14px; cursor: pointer; text-align: center;">' +
+        '<div style="font-size: 16px; font-weight: 600; color: #111111;">Zeilboot</div>' +
+      '</div>' +
+      '<div onclick="selectBoat(\'motorboot\')" class="option-card" style="padding: 20px 16px; border: 2px solid #E3E6E5; border-radius: 14px; cursor: pointer; text-align: center;">' +
+        '<div style="font-size: 16px; font-weight: 600; color: #111111;">Motorboot</div>' +
+      '</div>' +
+      '<div onclick="selectBoat(\'speedboot\')" class="option-card" style="padding: 20px 16px; border: 2px solid #E3E6E5; border-radius: 14px; cursor: pointer; text-align: center;">' +
+        '<div style="font-size: 16px; font-weight: 600; color: #111111;">Speedboot</div>' +
+      '</div>' +
+      '<div onclick="selectBoat(\'werkboot\')" class="option-card" style="padding: 20px 16px; border: 2px solid #E3E6E5; border-radius: 14px; cursor: pointer; text-align: center;">' +
+        '<div style="font-size: 16px; font-weight: 600; color: #111111;">Werkboot</div>' +
+      '</div>' +
+      '<div onclick="selectBoat(\'anders\')" class="option-card" style="padding: 20px 16px; border: 2px solid #E3E6E5; border-radius: 14px; cursor: pointer; text-align: center;">' +
+        '<div style="font-size: 16px; font-weight: 600; color: #111111;">Anders</div>' +
+      '</div>' +
+    '</div>' +
+    '<button onclick="goToStep(1)" class="btn-secondary" style="margin-top: 24px; background: #E3E6E5; color: #111111; border: none; padding: 14px 28px; border-radius: 12px; cursor: pointer; font-size: 16px; font-weight: 600;">Terug</button>' +
+  '</div>';
+}
+
+function renderStep3() {
+  var padding = isMobile ? "32px 20px" : "40px 32px";
+  
+  return '<div style="max-width: 600px; margin: 0 auto; padding: ' + padding + '; background: white; border-radius: 24px; box-shadow: 0 4px 24px rgba(46, 125, 107, 0.12);">' +
+    '<h2 style="font-size: 24px; font-weight: 700; color: #111111; margin: 0 0 8px 0;">Boot afmetingen</h2>' +
+    '<p style="font-size: 16px; color: #666666; margin: 0 0 32px 0;">Geef de specificaties van uw boot op</p>' +
+    '<div style="margin-bottom: 32px;">' +
+      '<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">' +
+        '<label style="font-size: 16px; font-weight: 600; color: #111111;">Lengte waterlijn (LWL)</label>' +
+        '<span id="lengthValue" style="font-size: 20px; font-weight: 700; color: #2E7D6B;">' + state.boatLength + ' m</span>' +
+      '</div>' +
+      '<input type="range" min="3" max="25" step="0.5" value="' + state.boatLength + '" oninput="updateLength(this.value)">' +
+      '<div style="display: flex; justify-content: space-between; font-size: 13px; color: #666666; margin-top: 6px;">' +
+        '<span>3 m</span>' +
+        '<span>25 m</span>' +
+      '</div>' +
+    '</div>' +
+    '<div style="margin-bottom: 32px;">' +
+      '<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">' +
+        '<label style="font-size: 16px; font-weight: 600; color: #111111;">Waterverplaatsing</label>' +
+        '<span id="weightValue" style="font-size: 20px; font-weight: 700; color: #2E7D6B;">' + state.boatWeight.toLocaleString("nl-NL") + ' kg</span>' +
+      '</div>' +
+      '<input type="range" min="500" max="50000" step="100" value="' + state.boatWeight + '" oninput="updateWeight(this.value)">' +
+      '<div style="display: flex; justify-content: space-between; font-size: 13px; color: #666666; margin-top: 6px;">' +
+        '<span>500 kg</span>' +
+        '<span>50.000 kg</span>' +
+      '</div>' +
+    '</div>' +
+    '<div style="display: flex; gap: 12px;">' +
+      '<button onclick="goToStep(2)" class="btn-secondary" style="flex: 1; background: #E3E6E5; color: #111111; border: none; padding: 16px 24px; border-radius: 12px; cursor: pointer; font-size: 16px; font-weight: 600;">Terug</button>' +
+      '<button onclick="goToStep(4)" class="btn-primary" style="flex: 2; background: #2E7D6B; color: white; border: none; padding: 16px 24px; border-radius: 12px; cursor: pointer; font-size: 16px; font-weight: 600;">Volgende</button>' +
+    '</div>' +
+  '</div>';
+}
+
+function renderStep4() {
+  var padding = isMobile ? "32px 20px" : "40px 32px";
+  
+  return '<div style="max-width: 600px; margin: 0 auto; padding: ' + padding + '; background: white; border-radius: 24px; box-shadow: 0 4px 24px rgba(46, 125, 107, 0.12);">' +
+    '<h2 style="font-size: 24px; font-weight: 700; color: #111111; margin: 0 0 8px 0;">Huidige aandrijving</h2>' +
+    '<p style="font-size: 16px; color: #666666; margin: 0 0 28px 0;">Wat voor motor heeft uw boot nu?</p>' +
+    '<div style="display: flex; flex-direction: column; gap: 12px;">' +
+      '<div onclick="selectDrive(\'geen\')" class="option-card" style="padding: 20px 24px; border: 2px solid #E3E6E5; border-radius: 14px; cursor: pointer;">' +
+        '<div style="font-size: 16px; font-weight: 600; color: #111111;">Geen motor</div>' +
+      '</div>' +
+      '<div onclick="selectDrive(\'buitenboord\')" class="option-card" style="padding: 20px 24px; border: 2px solid #E3E6E5; border-radius: 14px; cursor: pointer;">' +
+        '<div style="font-size: 16px; font-weight: 600; color: #111111;">Buitenboordmotor</div>' +
+      '</div>' +
+      '<div onclick="selectDrive(\'binnenboord\')" class="option-card" style="padding: 20px 24px; border: 2px solid #E3E6E5; border-radius: 14px; cursor: pointer;">' +
+        '<div style="font-size: 16px; font-weight: 600; color: #111111;">Binnenboordmotor</div>' +
+      '</div>' +
+      '<div onclick="selectDrive(\'elektrisch\')" class="option-card" style="padding: 20px 24px; border: 2px solid #E3E6E5; border-radius: 14px; cursor: pointer;">' +
+        '<div style="font-size: 16px; font-weight: 600; color: #111111;">Al elektrisch</div>' +
+      '</div>' +
+    '</div>' +
+    '<button onclick="goToStep(3)" class="btn-secondary" style="margin-top: 24px; background: #E3E6E5; color: #111111; border: none; padding: 14px 28px; border-radius: 12px; cursor: pointer; font-size: 16px; font-weight: 600;">Terug</button>' +
+  '</div>';
+}
+
+function renderStep5() {
+  var padding = isMobile ? "32px 20px" : "40px 32px";
+  
+  return '<div style="max-width: 600px; margin: 0 auto; padding: ' + padding + '; background: white; border-radius: 24px; box-shadow: 0 4px 24px rgba(46, 125, 107, 0.12);">' +
+    '<h2 style="font-size: 24px; font-weight: 700; color: #111111; margin: 0 0 8px 0;">Vaargebied</h2>' +
+    '<p style="font-size: 16px; color: #666666; margin: 0 0 28px 0;">Waar vaart u voornamelijk?</p>' +
+    '<div style="display: flex; flex-direction: column; gap: 12px;">' +
+      '<div onclick="selectWater(\'binnenwater\')" class="option-card" style="padding: 20px 24px; border: 2px solid #E3E6E5; border-radius: 14px; cursor: pointer;">' +
+        '<div style="font-size: 16px; font-weight: 600; color: #111111;">Binnenwateren</div>' +
+        '<div style="font-size: 14px; color: #666666; margin-top: 4px;">Meren, rivieren, kanalen</div>' +
+      '</div>' +
+      '<div onclick="selectWater(\'kustwater\')" class="option-card" style="padding: 20px 24px; border: 2px solid #E3E6E5; border-radius: 14px; cursor: pointer;">' +
+        '<div style="font-size: 16px; font-weight: 600; color: #111111;">Kustwateren</div>' +
+        '<div style="font-size: 14px; color: #666666; margin-top: 4px;">Zee, Waddenzee, IJsselmeer</div>' +
+      '</div>' +
+      '<div onclick="selectWater(\'beide\')" class="option-card" style="padding: 20px 24px; border: 2px solid #E3E6E5; border-radius: 14px; cursor: pointer;">' +
+        '<div style="font-size: 16px; font-weight: 600; color: #111111;">Beide</div>' +
+        '<div style="font-size: 14px; color: #666666; margin-top: 4px;">Zowel binnen- als kustwateren</div>' +
+      '</div>' +
+    '</div>' +
+    '<button onclick="goToStep(4)" class="btn-secondary" style="margin-top: 24px; background: #E3E6E5; color: #111111; border: none; padding: 14px 28px; border-radius: 12px; cursor: pointer; font-size: 16px; font-weight: 600;">Terug</button>' +
+  '</div>';
+}
+
+function renderStep6() {
+  var padding = isMobile ? "32px 20px" : "40px 32px";
+  
+  return '<div style="max-width: 600px; margin: 0 auto; padding: ' + padding + '; background: white; border-radius: 24px; box-shadow: 0 4px 24px rgba(46, 125, 107, 0.12);">' +
+    '<h2 style="font-size: 24px; font-weight: 700; color: #111111; margin: 0 0 8px 0;">Vaarduur</h2>' +
+    '<p style="font-size: 16px; color: #666666; margin: 0 0 28px 0;">Hoe lang wilt u gemiddeld kunnen varen?</p>' +
+    '<div style="display: flex; flex-direction: column; gap: 12px;">' +
+      '<div onclick="selectDuration(\'2-4\')" class="option-card" style="padding: 20px 24px; border: 2px solid #E3E6E5; border-radius: 14px; cursor: pointer;">' +
+        '<div style="font-size: 16px; font-weight: 600; color: #111111;">2-4 uur</div>' +
+        '<div style="font-size: 14px; color: #666666; margin-top: 4px;">Korte dagtochten</div>' +
+      '</div>' +
+      '<div onclick="selectDuration(\'4-8\')" class="option-card" style="padding: 20px 24px; border: 2px solid #E3E6E5; border-radius: 14px; cursor: pointer;">' +
+        '<div style="font-size: 16px; font-weight: 600; color: #111111;">4-8 uur</div>' +
+        '<div style="font-size: 14px; color: #666666; margin-top: 4px;">Volledige dagtochten</div>' +
+      '</div>' +
+      '<div onclick="selectDuration(\'8+\')" class="option-card" style="padding: 20px 24px; border: 2px solid #E3E6E5; border-radius: 14px; cursor: pointer;">' +
+        '<div style="font-size: 16px; font-weight: 600; color: #111111;">8+ uur</div>' +
+        '<div style="font-size: 14px; color: #666666; margin-top: 4px;">Langere tochten of meerdaags</div>' +
+      '</div>' +
+    '</div>' +
+    '<button onclick="goToStep(5)" class="btn-secondary" style="margin-top: 24px; background: #E3E6E5; color: #111111; border: none; padding: 14px 28px; border-radius: 12px; cursor: pointer; font-size: 16px; font-weight: 600;">Terug</button>' +
+  '</div>';
+}
+
+function renderStep7() {
+  var rec = state.recommendation;
+  var padding = isMobile ? "32px 20px" : "48px 40px";
+  
+  var warningHtml = "";
+  if (rec.warning) {
+    warningHtml = '<div style="background: rgba(255,180,0,0.2); border-radius: 12px; padding: 16px; margin-bottom: 24px;">' +
+      '<p style="margin: 0; font-size: 14px; color: #111111;">' + rec.warning + '</p>' +
+    '</div>';
+  }
+  
+  return '<div style="max-width: 600px; margin: 0 auto; padding: ' + padding + '; background: linear-gradient(135deg, #2E7D6B 0%, #1B5E4A 100%); border-radius: 24px; box-shadow: 0 8px 40px rgba(46, 125, 107, 0.35); color: white;">' +
+    '<div style="text-align: center; margin-bottom: 32px;">' +
+      '<p style="font-size: 14px; text-transform: uppercase; letter-spacing: 2px; opacity: 0.9; margin: 0 0 8px 0;">Uw aanbeveling</p>' +
+      '<h2 style="font-size: 42px; font-weight: 700; margin: 0; color: #F4B400;">' + rec.motor + '</h2>' +
+    '</div>' +
+    '<div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 32px;">' +
+      '<div style="text-align: center; padding: 20px; background: rgba(255,255,255,0.1); border-radius: 16px;">' +
+        '<div style="font-size: 14px; opacity: 0.8; margin-bottom: 4px;">Vermogen</div>' +
+        '<div style="font-size: 28px; font-weight: 700;">' + rec.motorPower + ' kW</div>' +
+      '</div>' +
+      '<div style="text-align: center; padding: 20px; background: rgba(255,255,255,0.1); border-radius: 16px;">' +
+        '<div style="font-size: 14px; opacity: 0.8; margin-bottom: 4px;">Batterij</div>' +
+        '<div style="font-size: 28px; font-weight: 700;">' + rec.batteryCapacity + ' kWh</div>' +
+      '</div>' +
+      '<div style="text-align: center; padding: 20px; background: rgba(255,255,255,0.1); border-radius: 16px;">' +
+        '<div style="font-size: 14px; opacity: 0.8; margin-bottom: 4px;">Kruissnelheid</div>' +
+        '<div style="font-size: 28px; font-weight: 700;">' + rec.cruisingSpeed + ' km/u</div>' +
+      '</div>' +
+      '<div style="text-align: center; padding: 20px; background: rgba(255,255,255,0.1); border-radius: 16px;">' +
+        '<div style="font-size: 14px; opacity: 0.8; margin-bottom: 4px;">Vaartijd</div>' +
+        '<div style="font-size: 28px; font-weight: 700;">' + rec.estimatedCruisingTime + ' uur</div>' +
+      '</div>' +
+    '</div>' +
+    warningHtml +
+    '<p style="text-align: center; font-size: 16px; opacity: 0.9; margin-bottom: 28px;">Vraag een vrijblijvende offerte aan en ontvang persoonlijk advies</p>' +
+    '<div style="display: flex; gap: 12px;">' +
+      '<button onclick="goToStep(6)" class="btn-secondary" style="flex: 1; background: rgba(255,255,255,0.2); color: white; border: none; padding: 16px 24px; border-radius: 12px; cursor: pointer; font-size: 16px; font-weight: 600;">Terug</button>' +
+      '<button onclick="goToStep(8)" class="btn-primary" style="flex: 2; background: #F4B400; color: #111111; border: none; padding: 16px 24px; border-radius: 12px; cursor: pointer; font-size: 16px; font-weight: 700; box-shadow: 0 4px 16px rgba(244, 180, 0, 0.4);">Vraag offerte aan</button>' +
+    '</div>' +
+  '</div>';
+}
+
+function renderStep8() {
+  var padding = isMobile ? "32px 20px" : "40px 32px";
+  
+  return '<div style="max-width: 600px; margin: 0 auto; padding: ' + padding + '; background: white; border-radius: 24px; box-shadow: 0 4px 24px rgba(46, 125, 107, 0.12);">' +
+    '<h2 style="font-size: 24px; font-weight: 700; color: #2E7D6B; margin: 0 0 8px 0; text-align: center;">Bijna klaar!</h2>' +
+    '<p style="font-size: 16px; color: #666666; text-align: center; margin: 0 0 32px 0;">Vul je gegevens in voor een persoonlijke offerte</p>' +
+    '<div style="display: flex; flex-direction: column; gap: 16px;">' +
+      '<div>' +
+        '<label style="display: block; font-size: 14px; font-weight: 600; color: #111111; margin-bottom: 6px;">Naam *</label>' +
+        '<input type="text" id="inputName" placeholder="Uw volledige naam" style="width: 100%; padding: 14px 16px; border-radius: 12px; border: 2px solid #E3E6E5; font-size: 16px; font-family: Quicksand, sans-serif;">' +
+      '</div>' +
+      '<div>' +
+        '<label style="display: block; font-size: 14px; font-weight: 600; color: #111111; margin-bottom: 6px;">E-mail *</label>' +
+        '<input type="email" id="inputEmail" placeholder="uw@email.nl" style="width: 100%; padding: 14px 16px; border-radius: 12px; border: 2px solid #E3E6E5; font-size: 16px; font-family: Quicksand, sans-serif;">' +
+      '</div>' +
+      '<div>' +
+        '<label style="display: block; font-size: 14px; font-weight: 600; color: #111111; margin-bottom: 6px;">Telefoonnummer</label>' +
+        '<input type="tel" id="inputPhone" placeholder="06-12345678" style="width: 100%; padding: 14px 16px; border-radius: 12px; border: 2px solid #E3E6E5; font-size: 16px; font-family: Quicksand, sans-serif;">' +
+      '</div>' +
+      '<div>' +
+        '<label style="display: block; font-size: 14px; font-weight: 600; color: #111111; margin-bottom: 6px;">Opmerking (optioneel)</label>' +
+        '<textarea id="inputNote" placeholder="Heeft u nog vragen of opmerkingen?" style="width: 100%; padding: 14px 16px; border-radius: 12px; border: 2px solid #E3E6E5; font-size: 16px; min-height: 100px; resize: vertical; font-family: Quicksand, sans-serif;"></textarea>' +
+      '</div>' +
+      '<div style="display: flex; gap: 12px; margin-top: 16px;">' +
+        '<button onclick="goToStep(7)" class="btn-secondary" style="flex: 1; background: #E3E6E5; color: #111111; border: none; padding: 16px 24px; border-radius: 12px; cursor: pointer; font-size: 16px; font-weight: 600;">Terug</button>' +
+        '<button onclick="handleSubmit()" class="btn-primary" style="flex: 2; background: #2E7D6B; color: white; border: none; padding: 16px 24px; border-radius: 12px; cursor: pointer; font-size: 16px; font-weight: 600;">Verstuur aanvraag</button>' +
+      '</div>' +
+    '</div>' +
+    '<p style="font-size: 13px; color: #666666; text-align: center; margin-top: 20px;">Uw gegevens worden veilig verwerkt</p>' +
+  '</div>';
+}
+
+function renderThankYou() {
+  var padding = isMobile ? "48px 24px" : "64px 40px";
+  var fontSize = isMobile ? "28px" : "36px";
+  
+  return '<div style="max-width: 600px; margin: 0 auto; padding: ' + padding + '; background: linear-gradient(135deg, #2E7D6B 0%, #1B5E4A 100%); border-radius: 24px; box-shadow: 0 8px 40px rgba(46, 125, 107, 0.35); color: white; text-align: center;">' +
+    '<div style="font-size: 64px; margin-bottom: 24px;">&#127881;</div>' +
+    '<h2 style="font-size: ' + fontSize + '; font-weight: 700; margin: 0 0 16px 0;">Bedankt voor uw aanvraag!</h2>' +
+    '<p style="font-size: 16px; margin: 0 0 12px 0; opacity: 0.95;">We nemen binnen 24 uur contact met u op.</p>' +
+    '<button onclick="resetCalculator()" class="btn-primary" style="margin-top: 24px; background: #F4B400; color: #111111; border: none; padding: 16px 32px; border-radius: 12px; cursor: pointer; font-size: 18px; font-weight: 700;">Nieuwe berekening</button>' +
+  '</div>';
+}
+
+function renderProgress() {
+  if (state.currentStep === 0 || state.currentStep === 9) return "";
+  
+  var currentVisualStep = Math.min(state.currentStep, 6);
+  var percent = (currentVisualStep / 6) * 100;
+
+  return '<div style="background: white; padding: 16px 24px; border-radius: 12px; box-shadow: 0 2px 12px rgba(46, 125, 107, 0.08); margin-bottom: 24px;">' +
+    '<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">' +
+      '<span style="font-size: 14px; font-weight: 600; color: #111111;">Stap ' + currentVisualStep + ' van 6</span>' +
+      '<span style="font-size: 14px; font-weight: 700; color: #2E7D6B;">' + Math.round(percent) + '%</span>' +
+    '</div>' +
+    '<div style="background: #E3E6E5; height: 8px; border-radius: 4px; overflow: hidden;">' +
+      '<div style="background: linear-gradient(90deg, #2E7D6B, #F4B400); height: 100%; width: ' + percent + '%; border-radius: 4px;"></div>' +
+    '</div>' +
+  '</div>';
+}
+
+function render() {
+  var progressContainer = document.getElementById("progress-container");
+  var container = document.getElementById("calculator-container");
+
+  progressContainer.innerHTML = renderProgress();
+
+  var contentHTML = "";
+  switch(state.currentStep) {
+    case 0: contentHTML = renderWelcomeScreen(); break;
+    case 1: contentHTML = renderStep1(); break;
+    case 2: contentHTML = renderStep2(); break;
+    case 3: contentHTML = renderStep3(); break;
+    case 4: contentHTML = renderStep4(); break;
+    case 5: contentHTML = renderStep5(); break;
+    case 6: contentHTML = renderStep6(); break;
+    case 7: contentHTML = renderStep7(); break;
+    case 8: contentHTML = renderStep8(); break;
+    case 9: contentHTML = renderThankYou(); break;
+    default: contentHTML = renderWelcomeScreen();
+  }
+
+  container.innerHTML = contentHTML;
+}
+
+function goToStep(step) {
+  state.currentStep = step;
+  render();
+}
+
+function selectCustomer(type) {
+  state.customerType = type;
+  setTimeout(function() { goToStep(2); }, 200);
+}
+
+function selectBoat(type) {
+  state.boatType = type;
+  setTimeout(function() { goToStep(3); }, 200);
+}
+
+function updateLength(value) {
+  state.boatLength = parseFloat(value);
+  document.getElementById("lengthValue").textContent = value + " m";
+}
+
+function updateWeight(value) {
+  state.boatWeight = parseInt(value);
+  document.getElementById("weightValue").textContent = parseInt(value).toLocaleString("nl-NL") + " kg";
+}
+
+function selectDrive(type) {
+  state.currentDrive = type;
+  setTimeout(function() { goToStep(5); }, 200);
+}
+
+function selectWater(type) {
+  state.waterType = type;
+  setTimeout(function() { goToStep(6); }, 200);
+}
+
+function selectDuration(duration) {
+  state.tripDuration = duration;
+  state.recommendation = calculateRecommendation();
+  setTimeout(function() { goToStep(7); }, 200);
+}
+
+function handleSubmit() {
+  var name = document.getElementById("inputName").value;
+  var email = document.getElementById("inputEmail").value;
+  
+  if (!name || !email) {
+    alert("Vul a.u.b. uw naam en e-mail in.");
+    return;
+  }
+
+  var leadData = {
+    name: name,
+    email: email,
+    phone: document.getElementById("inputPhone").value,
+    note: document.getElementById("inputNote").value,
+    customerType: state.customerType,
+    boatType: state.boatType,
+    boatLength: state.boatLength,
+    boatWeight: state.boatWeight,
+    currentDrive: state.currentDrive,
+    waterType: state.waterType,
+    tripDuration: state.tripDuration,
+    recommendedMotor: state.recommendation.motor,
+    recommendedBattery: state.recommendation.batteryCapacity
+  };
+  
+  window.parent.postMessage({ type: "CALCULATOR_LEAD", data: leadData }, "*");
+  
+  goToStep(9);
+}
+
+function resetCalculator() {
+  state = {
+    currentStep: 0,
+    customerType: null,
+    boatType: null,
+    boatLength: 6,
+    boatWeight: 2000,
+    currentDrive: null,
+    waterType: null,
+    tripDuration: null,
+    recommendation: null
+  };
+  render();
+}
+
+render();
+</script>
